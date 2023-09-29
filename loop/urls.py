@@ -15,7 +15,16 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from report_gen.views import TriggerReport
+from report_gen.views import GetReport
+
+# make two endpoints 
+# 1. to trigger report generation /trigger_report
+# 2. to get the report /get_report this also takes in a parameter of the report id
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('trigger_report', TriggerReport.as_view()),
+    path('get_report', GetReport.as_view()),
 ]

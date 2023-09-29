@@ -34,7 +34,7 @@ def convert_to_utc(time_str, timezone_str):
 
 
 def import_timezones():
-    csv_file_path = 'timezones.csv' 
+    csv_file_path = 'dummy_tz.csv' 
 
 
     with open(csv_file_path, 'r') as f:
@@ -52,7 +52,7 @@ def process_time(t, timezone):
     pass
 
 def import_office_hours():
-    csv_file_path = 'Menu hours.csv'
+    csv_file_path = 'dummy_office_hours.csv'
     with open(csv_file_path,'r') as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
@@ -64,6 +64,7 @@ def import_office_hours():
                 utc_et = convert_to_utc(row['end_time_local'], tz)
                 day = row['day']
                 restaurant.schedule[day] = {'open':utc_st, 'close':utc_et}
+                # print(restaurant.schedule)
                 restaurant.save()
             except:
                 # make a new restaurant object
@@ -86,7 +87,7 @@ def get_time_slice_time(time_str):
                
 
 def import_status():
-    csv_file_path = 'store status.csv'
+    csv_file_path = 'dummy_status.csv'
     with open(csv_file_path,'r') as f:
         csv_reader = csv.DictReader(f)
         entry = 10
@@ -124,6 +125,8 @@ def import_status():
             curr_status_obj.extrapolated = False 
             curr_status_obj.save()
 
+# import_timezones()
+# import_office_hours()
 import_status() 
 
 
