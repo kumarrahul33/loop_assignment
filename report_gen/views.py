@@ -8,11 +8,15 @@ from rest_framework.response import Response
 from data.models import Restaurants, Status, TimeSlice
 from report_gen.models import ReportGen
 import threading
+from . import time_mgt
+import pytz
 
 class TriggerReport(APIView):
     def __init__(self):
         self.current_time = datetime.strptime("2023-01-25 18:12:22.323869 UTC", "%Y-%m-%d %H:%M:%S.%f %Z")
+        self.current_time = pytz.utc.localize(self.current_time)
         self.report_id = None
+        self.report_obf = None
         restaurants = Restaurants.objects.all()
         self.final_report = dict()
         for elem_restaurants in restaurants:
@@ -27,7 +31,7 @@ class TriggerReport(APIView):
         self.report_generated = False
         
     def extrapolation_logic(self, status_obj):
-        prev_three_status = Status.objects.filter(storeID=status_obj.storeID,timeSlice__lt=status_obj.timeSlice).order_by('-timeSlice')[:3]
+        prev_three_status = Status.objects.filter(store=status_obj.store,timeSlice__lt=status_obj.timeSlice).order_by('-timeSlice')[:3]
         count_active = 0
         for obj in prev_three_status:
             if(obj.status == 'active'):
@@ -37,12 +41,13 @@ class TriggerReport(APIView):
         else:
             return 'inactive'
 
-    def in_office_hours(self, status_obj, restaurant_id):
-        restaurant_obj = Restaurants.objects.get(storeID=restaurant_id)
-        office_hours = restaurant_obj.schedule[status_obj.timeSlice.timestamp.weekday()]
+    def in_office_hours(self, status_obj, restaurant_obj):
+        office_hours = restaurant_obj.schedule[str(status_obj.timeSlice.timestamp.weekday())]
         office_hours_open = office_hours['open']
         office_hours_close = office_hours['close']
-        if(office_hours_open <= status_obj.timeSlice.timestamp.strftime("%H:%M") <= office_hours_close):
+        # TODO: use a dedicated comparator to time comparison
+        # if(office_hours_open <= status_obj.timeSlice.timestamp.strftime("%H:%M") <= office_hours_close):
+        if(time_mgt.utc_local_between(office_hours_open, office_hours_close, restaurant_obj.timezone, status_obj.timeSlice.timestamp)):
             return True
         return False
 
@@ -51,40 +56,48 @@ class TriggerReport(APIView):
         for time_slice in relevant_time_slices: 
             status_objs = Status.objects.filter(timeSlice=time_slice)
             for status_obj in status_objs:
-                if(not self.in_office_hours(status_obj, status_obj.storeID)):
+                if(not self.in_office_hours(status_obj, status_obj.store)):
                     continue
                 if(status_obj.status == 'active'):
-                    self.final_report[status_obj.storeID][up_key] += 1 
+                    self.final_report[status_obj.store.storeID][up_key] += 1 
                 else:
-                    self.final_report[status_obj.storeID][down_key] += 1
+                    self.final_report[status_obj.store.storeID][down_key] += 1
 
     def clean_data(self):
         # TODO: current time should be the system current time 
         # but for test we are keeping it as the max time of the entries in the status table
         current_time = self.current_time
         current_time = current_time.replace(minute=0, second=0, microsecond=0)
-        start_time = current_time - timedelta(weeks=1)
+        start_time = current_time - timedelta(weeks=1,hours=1)
         while start_time < current_time:
+            print(start_time)
+            start_time += timedelta(hours=1)
+            # start_time = pytz.utc.(start_time)
             if(TimeSlice.objects.filter(timestamp=start_time).exists()):
                 continue
             else:
+                # print("creating new time slice")
                 new_time_slice = TimeSlice(timestamp=start_time)
                 new_time_slice.save()
-            start_time += timedelta(hours=1)
+
+        
+        print("finished creating time slices")
 
         relevant_time_slices = TimeSlice.objects.filter(timestamp__gte=current_time-timedelta(weeks=1))
         # iterate through all the restaurants and generate the status for each time slice if not present and extrapolate the newly created status object 
         restaurants = Restaurants.objects.all()
         for restaurant in restaurants:
+            print("running on ", restaurant.storeID)
             for time_slice in relevant_time_slices:
-                if(Status.objects.filter(storeID=restaurant,timeSlice=time_slice).exists()):
+                if(Status.objects.filter(store=restaurant,timeSlice=time_slice).exists()):
                     continue
                 else:
-                    new_status = Status(storeID=restaurant,timeSlice=time_slice)
+                    new_status = Status(store=restaurant,timeSlice=time_slice)
                     new_status.save()
                     new_status.extrapolated = True
                     new_status.status = self.extrapolation_logic(new_status)
                     new_status.save()
+        print("finished extrapolating")
 
     def generate_data(self):
         # TODO: current time should be the system current time 
@@ -104,16 +117,15 @@ class TriggerReport(APIView):
         # for last week 
         self.get_up_down(0,0,1,"uptime_last_week","downtime_last_week")
 
-        report_obj = ReportGen.objects.get(reportID=self.report_id)
-        report_obj.report = self.final_report
-        report_obj.status = True 
-        report_obj.save()
+        self.report_obj = ReportGen.objects.get(reportID=self.report_id)
+        self.report_obj.report = self.final_report
+        self.report_obj.status = True 
+        self.report_obj.save()
     
     def generate_report(self):
         self.clean_data()
         self.generate_data()
         self.report_generated = True
-
 
         
     def get(self,request):

@@ -39,9 +39,9 @@ class Restaurants(models.Model):
 # 3. status default = unknown 
 
 class Status(models.Model):
-    storeID = models.ForeignKey(Restaurants, on_delete=models.PROTECT)
+    store = models.ForeignKey(Restaurants, on_delete=models.PROTECT)
     timeSlice = models.ForeignKey(TimeSlice, on_delete=models.PROTECT)
     status = models.CharField(max_length=100, default='unknown')
     extrapolated = models.BooleanField(default=True)
     def __str__(self):
-        return str(self.storeID) + ' ' + str(self.timeSlice) + ' ' + str(self.status)
+        return str(self.store) + ' ' + str(self.timeSlice) + ' ' + str(self.status)

@@ -32,6 +32,17 @@ def convert_to_utc(time_str, timezone_str):
     except ValueError as e:
         return str(e)
 
+def parse_time(time_str,timezone_str):
+        time_format = "%H:%M:%S"
+        out_time_format = "%H:%M:%S %Z"
+        input_time = datetime.strptime(time_str, time_format)
+
+        # Get the timezone object corresponding to the provided timezone string
+        input_timezone = pytz.timezone(timezone_str)
+        
+        # add the timezone to the time object
+        input_time = input_timezone.localize(input_time, is_dst=None)
+        return input_time.strftime(out_time_format)
 
 def import_timezones():
     csv_file_path = 'dummy_tz.csv' 
@@ -41,15 +52,16 @@ def import_timezones():
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
             # print(row['store_id'], row['timezone_str'])
-            store_id = row['store_id']
-            timezone = row['timezone_str']
-            # create a new restaurant object
-            new_restaurant = Restaurants(storeID=store_id,timezone=timezone)
-            new_restaurant.save()
+            try:
+                store_id = row['store_id']
+                timezone = row['timezone_str']
+                # create a new restaurant object
+                new_restaurant = Restaurants(storeID=store_id,timezone=timezone)
+                new_restaurant.save()
+            except:
+                pass
 
 # takes in the time (t) and the timezone and returns the time in UTC
-def process_time(t, timezone):
-    pass
 
 def import_office_hours():
     csv_file_path = 'dummy_office_hours.csv'
@@ -59,21 +71,17 @@ def import_office_hours():
             store_id = row['store_id']
             try:
                 restaurant = Restaurants.objects.get(storeID=store_id)
-                tz = restaurant.timezone
-                utc_st = convert_to_utc(row['start_time_local'], tz)
-                utc_et = convert_to_utc(row['end_time_local'], tz)
+                st = row['start_time_local']
+                et = row['end_time_local']
                 day = row['day']
-                restaurant.schedule[day] = {'open':utc_st, 'close':utc_et}
-                # print(restaurant.schedule)
+                restaurant.schedule[day] = {'open':st, 'close':et}
                 restaurant.save()
-            except:
-                # make a new restaurant object
+            except Exception as e:
                 new_restaurant = Restaurants(storeID=store_id,timezone='America/Chicago')
                 new_restaurant.save()
-                tz = 'America/Chicago'
-                utc_st = convert_to_utc(row['start_time_local'], tz)
-                utc_et = convert_to_utc(row['end_time_local'], tz)
-                restaurant.schedule[day] = {'open':utc_st, 'close':utc_et}
+                st = row['start_time_local']
+                et = row['end_time_local']
+                restaurant.schedule[day] = {'open':st, 'close':et}
 
 def get_time_slice_time(time_str):
     time_format = "%Y-%m-%d %H:%M:%S.%f %Z"
@@ -82,7 +90,8 @@ def get_time_slice_time(time_str):
     input_time = input_time.replace(minute=0, second=0, microsecond=0)
     utc_tz = pytz.timezone("UTC")
     input_time = utc_tz.localize(input_time)
-    formatted_utc_time = input_time.strftime("%Y-%m-%d %H:%M")
+    # formatted_utc_time = input_time.strftime("%Y-%m-%d %H:%M %Z")
+    formatted_utc_time = input_time.isoformat()
     return formatted_utc_time
                
 
@@ -90,15 +99,11 @@ def import_status():
     csv_file_path = 'dummy_status.csv'
     with open(csv_file_path,'r') as f:
         csv_reader = csv.DictReader(f)
-        entry = 10
         for row in csv_reader:
-            entry -= 1
-            if(entry < 0):
-                break
             store_id = row['store_id']
-            restaurants = None
+            restaurant = None
             try:
-                restaurants = Restaurants.objects.get(storeID=store_id)
+                restaurant = Restaurants.objects.get(storeID=store_id)
             except:
                 print("Restaurant not found:", store_id)
                 continue
@@ -117,16 +122,16 @@ def import_status():
 
             curr_status_obj = None
             try:
-                curr_status_obj = Status.objects.get(storeID=restaurants,timeSlice=curr_time_slice)
+                curr_status_obj = Status.objects.get(store=restaurant,timeSlice=curr_time_slice)
             except:
-                curr_status_obj = Status(storeID=restaurants,timeSlice=curr_time_slice)
+                curr_status_obj = Status(store=restaurant,timeSlice=curr_time_slice)
             
             curr_status_obj.status = row['status']
             curr_status_obj.extrapolated = False 
             curr_status_obj.save()
 
-# import_timezones()
-# import_office_hours()
+import_timezones()
+import_office_hours()
 import_status() 
 
 

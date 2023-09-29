@@ -1,4 +1,9 @@
 import pandas as pd
+from data.models import Restaurants
+from data.models import Status
+from datetime import datetime
+from data.models import TimeSlice
+import pytz
 
 
 def make_test_data():
@@ -23,4 +28,27 @@ def get_max_time():
     max_time = status['timestamp_utc'].max()
     print(max_time)
 
-get_max_time()
+
+def validate_test_data():
+    status = pd.read_csv("dummy_status.csv")
+    office_hours = pd.read_csv("dummy_office_hours.csv")
+    tz = pd.read_csv('dummy_tz.csv')
+    
+    curr_store = 8445695079583663910 
+    restaurant_obj = Restaurants.objects.get(storeID=curr_store)
+    print(restaurant_obj.schedule)
+    # find the current store in the office hours
+    curr_store_office_hours = office_hours[office_hours['store_id'] == curr_store]
+    print(curr_store_office_hours)
+
+    # find the current store in the tz
+    curr_store_tz = tz[tz['store_id'] == curr_store]
+    print(curr_store_tz)
+
+
+    
+    for index,row in status.iterrows():
+        if(row['store_id'] == curr_store):
+            print("time: ",row['timestamp_utc'], " status: ", row['status']) 
+        
+# validate_test_data()
